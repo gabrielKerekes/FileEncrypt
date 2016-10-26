@@ -17,31 +17,49 @@ import java.util.Scanner;
  *
  */
 
+// todo: rozumne try catch vsade asi treba
+// todo: if file name empty use example file
 public class Main
 {
     public static void mainMenu()
     {
-        // todo: nejak ukoncit while
-        while (true) {
+        boolean shouldRun = true;
+        while (shouldRun)
+        {
             System.out.println("Zvolte moznost:");
             System.out.println("1. Sifrovat");
             System.out.println("2. Desifrovat");
             System.out.println("3. Vygenerovat kluc");
+            // todo: mozno dat prec - naco? nech si tam on da nieco 1GB ked tak
+            System.out.println("4. Vygenerovat gigovy subor");
+            System.out.println("0. Ukoncit");
             System.out.println("Vasa volba: ");
 
             Scanner in = new Scanner(System.in);
             int num = in.nextInt();
 
-            switch (num) {
+            switch (num)
+            {
                 case 1:
                     encrypt();
                     break;
+
                 case 2:
                     decrypt();
                     break;
+
                 case 3:
                     generateKey();
                     break;
+
+                case 4:
+                    gigaFileTest();
+                    break;
+
+                case 0:
+                    shouldRun = false;
+                    break;
+
                 default:
                     break;
             }
@@ -106,81 +124,77 @@ public class Main
 
     public static void generateKey()
     {
-        System.out.println("Zadajte meno suboru, do ktoreho ma byt ulozeny kluc: ");
-        String keyFileName = "";
+        Scanner in = new Scanner(System.in);
 
-        SecureRandom randomKey = null;
+        System.out.println("Zadajte meno suboru, do ktoreho ma byt ulozeny kluc: ");
+        String keyFileName = in.nextLine();
+
+        SecureRandom random = null;
         try
         {
-            randomKey = SecureRandom.getInstance("SHA1PRNG");
+            random = SecureRandom.getInstance("SHA1PRNG");
         }
         catch (NoSuchAlgorithmException e1)
         {
-            // TODO Auto-generated catch block
             e1.printStackTrace();
         }
-        byte randomBytesKey[] = new byte[16];
-        randomKey.nextBytes(randomBytesKey);
+        byte randomKeyBytes[] = new byte[16];
+        random.nextBytes(randomKeyBytes);
 
-        //todo: write key to file
+        File keyFile = new File(keyFileName);
 
-        System.out.println("Kluc bol vygenerovany a ulozeny do suboru: " + keyFileName + ".key");
+        CryptoClass.writeBytesToFile(keyFile, randomKeyBytes);
+
+        System.out.println("Kluc bol vygenerovany a ulozeny do suboru: " + keyFileName);
+    }
+
+    public static void gigaFileTest()
+    {
+        Scanner in = new Scanner(System.in);
+        System.out.println("Zadajte nazov noveho suboru: ");
+        String gigaFileName = in.nextLine();
+
+        File file = new File(gigaFileName);
+        RandomAccessFile gigaFile = null;
+        try
+        {
+            System.out.println("Vytvaranie gigoveho suboru...");
+            gigaFile = new RandomAccessFile(file, "rw");
+            gigaFile.setLength(1024*1024*50); //1024*1024*1024 for 1 GB
+            System.out.println("Gigovy subor vytvoreny...");
+        }
+        catch (IOException e)
+        {
+            System.out.println("Vytvorenie gigoveho suboru zlyhalo");
+            e.printStackTrace();
+        }
+        System.out.println("Vytvaranie nahodneho kluca...");
+        SecureRandom random = null;
+        try
+        {
+            random = SecureRandom.getInstance("SHA1PRNG");
+        }
+        catch (NoSuchAlgorithmException e1)
+        {
+            e1.printStackTrace();
+        }
+        byte randomKeyBytes[] = new byte[16];
+        random.nextBytes(randomKeyBytes);
+        System.out.println("Sifrovane gigoveho suboru...");
+        File outputFile = new File("gigaOutput.txt");
+        long startTime = System.currentTimeMillis();
+        try {
+            CryptoClass.encrypt(randomKeyBytes, file, outputFile);
+        } catch (CryptoException e) {
+            e.printStackTrace();
+        }
+        long endTime = System.currentTimeMillis();
+        System.out.println("Subor zasifrovany. Trvanie: " + (endTime-startTime));
     }
 
     public static void main(String[] args)
     {
         //IMPORTANT!! = java -Xms1g -Xmx5g // run with these parameters if file is 1GB
-        //String key = "Mary has two cat"; //key has to have 16bytes
-
         mainMenu();
-
-        //nahodne vytvaranie kluca
-        SecureRandom randomKey = null;
-        try
-        {
-            randomKey = SecureRandom.getInstance("SHA1PRNG");
-        }
-        catch (NoSuchAlgorithmException e1)
-        {
-            // TODO Auto-generated catch block
-            e1.printStackTrace();
-        }
-        byte randomBytesKey[] = new byte[] { 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65};
-        randomKey.nextBytes(randomBytesKey);
-
-
-        File inputFile = new File("document.txt");
-
-//        RandomAccessFile gigaFile;
-//        try
-//        {
-//            gigaFile = new RandomAccessFile(inputFile, "rw");
-//            gigaFile.setLength(1024); //1024*1024*1024 for 1 GB
-//        }
-//        catch (IOException e)
-//        {
-//            System.out.println("Failed while creating 1gb file");
-//            e.printStackTrace();
-//        }
-
-        File encryptedFile = new File("documentEncrypted.txt");
-        File decryptedFile = new File("documentDecrypted.txt");
-
-        long start = System.nanoTime();
-        try
-        {
-            CryptoClass.encrypt(randomBytesKey, inputFile, encryptedFile);
-            CryptoClass.decrypt(randomBytesKey, encryptedFile, decryptedFile);
-        }
-        catch (CryptoException ex)
-        {
-            System.out.println(ex.getMessage());
-            ex.printStackTrace();
-        }
-
-        long end = System.nanoTime();
-        long elapsedTime = end - start;
-        double seconds = (double)elapsedTime / 1000000000.0;
-        System.out.println("Time in seconds: "+seconds);
     }
 }

@@ -1,15 +1,10 @@
 import com.sun.org.apache.xerces.internal.impl.dv.util.Base64;
 
 import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.security.AlgorithmParameters;
-import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 
@@ -23,10 +18,8 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class CryptoClass
 {
-    private static byte[] hmacForEncrypt;
 
     private static final String ALGORITHM = "AES";
-    //private static final String TRANSFORMATION = "AES";
     private static final String TRANSFORMATION = "AES/CBC/PKCS5Padding";
 
     public static byte[] readBytesFromFile(File inputFile)
@@ -110,8 +103,8 @@ public class CryptoClass
         {
             SecureRandom randomSecureRandom = SecureRandom.getInstance("SHA1PRNG"); //maybe rather new SecureRandom();
             byte[] iv = new byte[cipher.getBlockSize()];
-            //randomSecureRandom.nextBytes(iv);
-            iv = new byte[] { 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65};
+            randomSecureRandom.nextBytes(iv);
+
             return new IvParameterSpec(iv);
         }
         catch (Exception e)
@@ -144,14 +137,15 @@ public class CryptoClass
             byte[] inputBytes = readBytesFromFile(inputFile);
 
             byte[] outputBytes = cipher.doFinal(inputBytes);
-
+            byte[] iv = ivParams.getIV();
             byte[] hmac = createHmac(key, outputBytes);
 
-            byte[] outputBytesWithHmac = new byte[outputBytes.length + hmac.length];
-            System.arraycopy(outputBytes, 0, outputBytesWithHmac, 0, outputBytes.length);
-            System.arraycopy(hmac, 0, outputBytesWithHmac, outputBytes.length, hmac.length);
+            byte[] outputBytesWithIvAndHmac = new byte[outputBytes.length + iv.length + hmac.length];
+            System.arraycopy(outputBytes, 0, outputBytesWithIvAndHmac, 0, outputBytes.length);
+            System.arraycopy(iv, 0, outputBytesWithIvAndHmac, outputBytes.length, iv.length);
+            System.arraycopy(hmac, 0, outputBytesWithIvAndHmac, outputBytes.length + iv.length, hmac.length);
 
-            writeBytesToFile(outputFile, outputBytesWithHmac);
+            writeBytesToFile(outputFile, outputBytesWithIvAndHmac);
         }
         catch (NoSuchPaddingException | NoSuchAlgorithmException
                 | InvalidKeyException | BadPaddingException
@@ -172,9 +166,8 @@ public class CryptoClass
             byte[] inputBytes = readBytesFromFile(inputFile);
 
             byte[] hmac = Arrays.copyOfRange(inputBytes, inputBytes.length - 32, inputBytes.length);
-            byte[] inputBytesNoHmac = Arrays.copyOfRange(inputBytes, 0, inputBytes.length - 32);
-
-            //inputBytes[3] = 'c'; Data will be tampered
+            byte[] iv = Arrays.copyOfRange(inputBytes, inputBytes.length - 32 - 16, inputBytes.length - 32);
+            byte[] inputBytesNoHmac = Arrays.copyOfRange(inputBytes, 0, inputBytes.length - 32 - 16);
 
             byte[] calculatedHmac = createHmac(key, inputBytesNoHmac);
 
@@ -183,7 +176,7 @@ public class CryptoClass
                 Key secretKey = new SecretKeySpec(key, ALGORITHM);
                 Cipher cipher = Cipher.getInstance(TRANSFORMATION);
 
-                IvParameterSpec ivParams = createIv(cipher);
+                IvParameterSpec ivParams = new IvParameterSpec(iv);
 
                 cipher.init(Cipher.DECRYPT_MODE, secretKey, ivParams);
 
