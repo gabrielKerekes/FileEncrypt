@@ -1,24 +1,11 @@
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Scanner;
 
-/*
- * Ako funguje integrita:
- * Vo funkcii encrypt sa subor zasifruje a potom sa pomocou nahodnym klucom a tymto
- * zasifrovanym suborov vykona mac funkcia. Vystup sa zachova ako hmacEncrypt staticka premenna
- *
- * Pri desifrovani sa najrpv vstupny subor (zasifrovany originalny subor) spolu s nahodnym klucom
- * vlozia do vstupu mac funkcie. Ak sa zachovala integrita, tak vystpu z mac funkcie by mal byt
- * rovnaky ako hmacEncrypt.
- *
- *
- */
-
-// todo: rozumne try catch vsade asi treba
-// todo: if file name empty use example file
 public class Main
 {
     public static void mainMenu()
@@ -30,13 +17,21 @@ public class Main
             System.out.println("1. Sifrovat");
             System.out.println("2. Desifrovat");
             System.out.println("3. Vygenerovat kluc");
-            // todo: mozno dat prec - naco? nech si tam on da nieco 1GB ked tak
-            System.out.println("4. Vygenerovat gigovy subor");
+            System.out.println("4. Test na gigovom subor");
             System.out.println("0. Ukoncit");
             System.out.println("Vasa volba: ");
 
             Scanner in = new Scanner(System.in);
-            int num = in.nextInt();
+
+            int num = 0;
+            try
+            {
+                num = in.nextInt();
+            }
+            catch (Exception e)
+            {
+                System.out.println("Nespravny vstup");
+            }
 
             switch (num)
             {
@@ -70,24 +65,30 @@ public class Main
     {
         Scanner in = new Scanner(System.in);
 
-        System.out.println("Zadajte meno suboru na zasifrovanie: ");
-        String fileNameToEncrypt = in.nextLine();
-
-        System.out.println("Zadajte meno suboru, do ktoreho sa ulozi zasifrovany text: ");
-        String fileNameToSaveEncrypted = in.nextLine();
-
-        System.out.println("Zadajte meno suboru s klucom: ");
-        String keyFileName = in.nextLine();
-
-        File keyFile = new File(keyFileName);
-        byte[] key = CryptoClass.readBytesFromFile(keyFile);
-
-        File inputFile = new File(fileNameToEncrypt);
-        File outputFile = new File(fileNameToSaveEncrypted);
-
         try
         {
+
+            System.out.println("Zadajte meno suboru na zasifrovanie: ");
+            String fileNameToEncrypt = in.nextLine();
+
+            System.out.println("Zadajte meno suboru, do ktoreho sa ulozi zasifrovany text: ");
+            String fileNameToSaveEncrypted = in.nextLine();
+
+            System.out.println("Zadajte meno suboru s klucom: ");
+            String keyFileName = in.nextLine();
+
+            File keyFile = new File(keyFileName);
+            byte[] key = FileUtils.readBytesFromFile(keyFile);
+
+            File inputFile = new File(fileNameToEncrypt);
+            File outputFile = new File(fileNameToSaveEncrypted);
+
             CryptoClass.encrypt(key, inputFile, outputFile);
+            System.out.println("Subor bol uspesne zasifrovany a ulozeny do " + fileNameToSaveEncrypted);
+        }
+        catch (FileNotFoundException e1)
+        {
+            System.out.println("Niektory zo suborov nebol najdeny");
         }
         catch (Exception e)
         {
@@ -99,22 +100,28 @@ public class Main
     {
         Scanner in = new Scanner(System.in);
 
-        System.out.println("Zadajte meno suboru na desifrovanie: ");
-        String fileNameToDecrypt = in.nextLine();
-        System.out.println("Zadajte meno suboru, do ktoreho sa ulozi desifrovany text: ");
-        String fileNameToSaveDecrypted = in.nextLine();
-        System.out.println("Zadajte meno suboru s klucom: ");
-        String keyFileName = in.nextLine();
-
-        File keyFile = new File(keyFileName);
-        byte[] key = CryptoClass.readBytesFromFile(keyFile);
-
-        File inputFile = new File(fileNameToDecrypt);
-        File outputFile = new File(fileNameToSaveDecrypted);
-
         try
         {
+
+            System.out.println("Zadajte meno suboru na desifrovanie: ");
+            String fileNameToDecrypt = in.nextLine();
+            System.out.println("Zadajte meno suboru, do ktoreho sa ulozi desifrovany text: ");
+            String fileNameToSaveDecrypted = in.nextLine();
+            System.out.println("Zadajte meno suboru s klucom: ");
+            String keyFileName = in.nextLine();
+
+            File keyFile = new File(keyFileName);
+            byte[] key = FileUtils.readBytesFromFile(keyFile);
+
+            File inputFile = new File(fileNameToDecrypt);
+            File outputFile = new File(fileNameToSaveDecrypted);
+
             CryptoClass.decrypt(key, inputFile, outputFile);
+            System.out.println("Subor bol uspesne desifrovany a ulozeny do " + fileNameToSaveDecrypted);
+        }
+        catch (FileNotFoundException e1)
+        {
+            System.out.println("Niektory zo suborov nebol najdeny");
         }
         catch (Exception e)
         {
@@ -133,19 +140,20 @@ public class Main
         try
         {
             random = SecureRandom.getInstance("SHA1PRNG");
+
+            byte randomKeyBytes[] = new byte[16];
+            random.nextBytes(randomKeyBytes);
+
+            File keyFile = new File(keyFileName);
+
+            FileUtils.writeBytesToFile(keyFile, randomKeyBytes);
+
+            System.out.println("Kluc bol vygenerovany a ulozeny do suboru: " + keyFileName);
         }
         catch (NoSuchAlgorithmException e1)
         {
             e1.printStackTrace();
         }
-        byte randomKeyBytes[] = new byte[16];
-        random.nextBytes(randomKeyBytes);
-
-        File keyFile = new File(keyFileName);
-
-        CryptoClass.writeBytesToFile(keyFile, randomKeyBytes);
-
-        System.out.println("Kluc bol vygenerovany a ulozeny do suboru: " + keyFileName);
     }
 
     public static void gigaFileTest()
@@ -160,7 +168,7 @@ public class Main
         {
             System.out.println("Vytvaranie gigoveho suboru...");
             gigaFile = new RandomAccessFile(file, "rw");
-            gigaFile.setLength(1024*1024*50); //1024*1024*1024 for 1 GB
+            gigaFile.setLength(1024*1024*1024); //1024*1024*1024 for 1 GB
             System.out.println("Gigovy subor vytvoreny...");
         }
         catch (IOException e)
@@ -180,21 +188,27 @@ public class Main
         }
         byte randomKeyBytes[] = new byte[16];
         random.nextBytes(randomKeyBytes);
-        System.out.println("Sifrovane gigoveho suboru...");
+        System.out.println("Sifrovanie gigoveho suboru...");
         File outputFile = new File("gigaOutput.txt");
         long startTime = System.currentTimeMillis();
-        try {
+        try
+        {
             CryptoClass.encrypt(randomKeyBytes, file, outputFile);
-        } catch (CryptoException e) {
+            long endTime = System.currentTimeMillis();
+            System.out.println("Subor zasifrovany. Trvanie: " + (endTime-startTime) + " milisekund.");
+        }
+        catch (CryptoException e)
+        {
             e.printStackTrace();
         }
-        long endTime = System.currentTimeMillis();
-        System.out.println("Subor zasifrovany. Trvanie: " + (endTime-startTime));
+        catch (OutOfMemoryError e2)
+        {
+            System.out.println("Prilis velky subor, alebo ste nezadali parametre -Xms1g -Xmx5g. PRERUŠENÉ.");
+        }
     }
 
     public static void main(String[] args)
     {
-        //IMPORTANT!! = java -Xms1g -Xmx5g // run with these parameters if file is 1GB
         mainMenu();
     }
 }

@@ -18,64 +18,84 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class CryptoClass
 {
-
     private static final String ALGORITHM = "AES";
     private static final String TRANSFORMATION = "AES/CBC/PKCS5Padding";
 
-    public static byte[] readBytesFromFile(File inputFile)
+    public static void encrypt(byte[] key, File inputFile, File outputFile) throws CryptoException
     {
-        FileInputStream inputStream = null;
         try
         {
-            inputStream = new FileInputStream(inputFile);
-            byte[] inputBytes = new byte[(int) inputFile.length()];
-            inputStream.read(inputBytes);
+            Key secretKey = new SecretKeySpec(key, ALGORITHM);
+            Cipher cipher = Cipher.getInstance(TRANSFORMATION);
 
-            return inputBytes;
+            IvParameterSpec ivParams = createIv(cipher);
+
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivParams);
+
+            byte[] inputBytes = FileUtils.readBytesFromFile(inputFile);
+
+            byte[] outputBytes = cipher.doFinal(inputBytes);
+            byte[] iv = ivParams.getIV();
+            byte[] hmac = createHmac(key, outputBytes);
+
+            byte[] outputBytesWithIvAndHmac = new byte[outputBytes.length + iv.length + hmac.length];
+            System.arraycopy(outputBytes, 0, outputBytesWithIvAndHmac, 0, outputBytes.length);
+            System.arraycopy(iv, 0, outputBytesWithIvAndHmac, outputBytes.length, iv.length);
+            System.arraycopy(hmac, 0, outputBytesWithIvAndHmac, outputBytes.length + iv.length, hmac.length);
+
+            FileUtils.writeBytesToFile(outputFile, outputBytesWithIvAndHmac);
+        }
+        catch (NoSuchPaddingException | NoSuchAlgorithmException
+                | InvalidKeyException | BadPaddingException
+                | IllegalBlockSizeException ex)
+        {
+            throw new CryptoException("Error encrypting file", ex);
         }
         catch (Exception e)
         {
             e.printStackTrace();
         }
-        finally
-        {
-            try
-            {
-                if (inputStream != null)
-                    inputStream.close();
-            }
-            catch (Exception e)
-            {
-
-            }
-        }
-
-        return null;
     }
 
-    public static void writeBytesToFile(File outputFile, byte[] bytes)
+    public static void decrypt(byte[] key, File inputFile, File outputFile) throws CryptoException
     {
-        FileOutputStream outputStream = null;
         try
         {
-            outputStream = new FileOutputStream(outputFile);
-            outputStream.write(bytes);
+            byte[] inputBytes = FileUtils.readBytesFromFile(inputFile);
+
+            byte[] hmac = Arrays.copyOfRange(inputBytes, inputBytes.length - 32, inputBytes.length);
+            byte[] iv = Arrays.copyOfRange(inputBytes, inputBytes.length - 32 - 16, inputBytes.length - 32);
+            byte[] inputBytesNoHmac = Arrays.copyOfRange(inputBytes, 0, inputBytes.length - 32 - 16);
+
+            byte[] calculatedHmac = createHmac(key, inputBytesNoHmac);
+
+            if (MessageDigest.isEqual(hmac, calculatedHmac))
+            {
+                Key secretKey = new SecretKeySpec(key, ALGORITHM);
+                Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+
+                IvParameterSpec ivParams = new IvParameterSpec(iv);
+
+                cipher.init(Cipher.DECRYPT_MODE, secretKey, ivParams);
+
+                byte[] outputBytes = cipher.doFinal(inputBytesNoHmac);
+
+                FileUtils.writeBytesToFile(outputFile, outputBytes);
+            }
+            else
+            {
+                System.out.println("Data boli zmenene. PRERUŠENÉ.");
+            }
+        }
+        catch (NoSuchPaddingException | NoSuchAlgorithmException
+                | InvalidKeyException | BadPaddingException
+                | IllegalBlockSizeException ex)
+        {
+            throw new CryptoException("Error decrypting file", ex);
         }
         catch (Exception e)
         {
             e.printStackTrace();
-        }
-        finally
-        {
-            try
-            {
-                if (outputStream != null)
-                    outputStream.close();
-            }
-            catch (Exception e)
-            {
-
-            }
         }
     }
 
@@ -113,91 +133,5 @@ public class CryptoClass
         }
 
         return null;
-    }
-
-    public static void encrypt(byte[] key, File inputFile, File outputFile) throws CryptoException
-    {
-        try
-        {
-            Key secretKey = new SecretKeySpec(key, ALGORITHM);
-            Cipher cipher = Cipher.getInstance(TRANSFORMATION); //if transformation was AES we would get error -- ECB mode cannot use IV
-
-            //Kebyze pouzijeme transformaciu AES tak by sa zvolil blokovy mod ECB a nemohli by sme pridat IV
-            //CBC is better for larger files
-            //GCM does all the hard work, provides authenticated encryption (integrity)
-            //Nemame ale pouzit hotove riesenia takze podla mna nemozeme GCM pouzit ale to CBC radsej a pouzijeme HMAC
-            //http://security.stackexchange.com/questions/63132/when-to-use-hmac-alongside-aes
-            //http://netnix.org/2015/04/19/aes-encryption-with-hmac-integrity-in-java/ --PRECITAT
-
-            //implementing IV
-            IvParameterSpec ivParams = createIv(cipher);
-
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivParams);
-
-            byte[] inputBytes = readBytesFromFile(inputFile);
-
-            byte[] outputBytes = cipher.doFinal(inputBytes);
-            byte[] iv = ivParams.getIV();
-            byte[] hmac = createHmac(key, outputBytes);
-
-            byte[] outputBytesWithIvAndHmac = new byte[outputBytes.length + iv.length + hmac.length];
-            System.arraycopy(outputBytes, 0, outputBytesWithIvAndHmac, 0, outputBytes.length);
-            System.arraycopy(iv, 0, outputBytesWithIvAndHmac, outputBytes.length, iv.length);
-            System.arraycopy(hmac, 0, outputBytesWithIvAndHmac, outputBytes.length + iv.length, hmac.length);
-
-            writeBytesToFile(outputFile, outputBytesWithIvAndHmac);
-        }
-        catch (NoSuchPaddingException | NoSuchAlgorithmException
-                | InvalidKeyException | BadPaddingException
-                | IllegalBlockSizeException ex)
-        {
-            throw new CryptoException("Error encrypting file", ex);
-        }
-        catch (Exception e)
-        {
-            e.printStackTrace();
-        }
-    }
-
-    public static void decrypt(byte[] key, File inputFile, File outputFile) throws CryptoException
-    {
-        try
-        {
-            byte[] inputBytes = readBytesFromFile(inputFile);
-
-            byte[] hmac = Arrays.copyOfRange(inputBytes, inputBytes.length - 32, inputBytes.length);
-            byte[] iv = Arrays.copyOfRange(inputBytes, inputBytes.length - 32 - 16, inputBytes.length - 32);
-            byte[] inputBytesNoHmac = Arrays.copyOfRange(inputBytes, 0, inputBytes.length - 32 - 16);
-
-            byte[] calculatedHmac = createHmac(key, inputBytesNoHmac);
-
-            if (MessageDigest.isEqual(hmac, calculatedHmac))
-            {
-                Key secretKey = new SecretKeySpec(key, ALGORITHM);
-                Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-
-                IvParameterSpec ivParams = new IvParameterSpec(iv);
-
-                cipher.init(Cipher.DECRYPT_MODE, secretKey, ivParams);
-
-                byte[] outputBytes = cipher.doFinal(inputBytesNoHmac);
-
-                writeBytesToFile(outputFile, outputBytes);
-            }
-            else
-            {
-                System.out.println("Data has been tampered");
-            }
-        }
-        catch (NoSuchPaddingException | NoSuchAlgorithmException
-                | InvalidKeyException | BadPaddingException
-                | IllegalBlockSizeException ex)
-        {
-            throw new CryptoException("Error decrypting file", ex);
-        }
-        catch (Exception e)
-        {
-            e.printStackTrace();
-        }
     }
 }
